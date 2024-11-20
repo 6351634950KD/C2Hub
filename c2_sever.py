@@ -243,7 +243,7 @@ async def CatFile(request):
         if cat_file.startswith(b"Error:"):
             print(f"\033[31m[-] {cat_file.decode()}\033[0m")
         else:
-            print("\033[32m[+] File Content: \033[0m")
+            print("\033[32m[+] File Content: \033[0m ")
             print(f"{cat_file.decode()}")
         text = 'OK'
         return web.Response(text=text)

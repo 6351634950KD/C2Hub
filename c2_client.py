@@ -141,7 +141,7 @@ def handle_shell():
     print("Handling shell command...")
 
 def handle_sleep():
-    print("Handling sleep command...")
+    print("Handling sleep command..")
 
 # Create a switch-like dictionary
 commands_switch = {

